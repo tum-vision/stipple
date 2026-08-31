@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stipple</title>
+<meta name="description" content="Stipple: Real-Time Incremental Gaussian Splatting with Visual-Inertial Tracking.">
+<meta property="og:title" content="Stipple: Real-Time Incremental Gaussian Splatting with Visual-Inertial Tracking">
+<meta property="og:description" content="A real-time pipeline that tracks with a stereo-inertial system and incrementally builds a 3D Gaussian Splatting map, concurrently and without blocking tracking.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f6f6f4;
+    --fg: #1a1a1c;
+    --fg-soft: #55555c;
+    --fg-faint: #86868f;
+    --line: #e4e4e0;
+    --accent: #5b47d6;
+    --accent-soft: #ece9fb;
+    --card: #ffffff;
+    --dot: #d7d7d2;
+    --max: 940px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f0f11;
+      --bg-alt: #161618;
+      --fg: #ececee;
+      --fg-soft: #b4b4bc;
+      --fg-faint: #7c7c86;
+      --line: #2a2a2e;
+      --accent: #9d8dff;
+      --accent-soft: #211d3a;
+      --card: #17171a;
+      --dot: #2c2c30;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f0f11;
+    --bg-alt: #161618;
+    --fg: #ececee;
+    --fg-soft: #b4b4bc;
+    --fg-faint: #7c7c86;
+    --line: #2a2a2e;
+    --accent: #9d8dff;
+    --accent-soft: #211d3a;
+    --card: #17171a;
+    --dot: #2c2c30;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  img { max-width: 100%; display: block; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- Hero ---------- */
+  header.hero {
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid var(--line);
+    background:
+      radial-gradient(var(--dot) 1.1px, transparent 1.2px) 0 0 / 18px 18px,
+      var(--bg-alt);
+  }
+  header.hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 70% 60% at 50% 0%, transparent 30%, var(--bg-alt) 100%);
+    pointer-events: none;
+  }
+  .hero-inner { position: relative; z-index: 1; padding: 72px 24px 56px; text-align: center; }
+  .venue {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    padding: 5px 12px;
+    border-radius: 999px;
+    margin-bottom: 22px;
+  }
+  h1.title {
+    font-family: Newsreader, Georgia, "Times New Roman", serif;
+    font-weight: 600;
+    font-size: clamp(2rem, 5.2vw, 3.1rem);
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    margin: 0 auto 8px;
+    max-width: 20ch;
+  }
+  .subtitle {
+    font-size: clamp(1rem, 2.4vw, 1.18rem);
+    color: var(--fg-soft);
+    margin: 0 auto 30px;
+    max-width: 46ch;
+  }
+  .authors {
+    font-size: 1.05rem;
+    margin: 0 0 6px;
+    line-height: 2;
+  }
+  .authors a { color: var(--fg); border-bottom: 1px solid var(--line); }
+  .authors sup { color: var(--accent); font-weight: 600; }
+  .affil { color: var(--fg-faint); font-size: 0.92rem; margin: 0 0 30px; }
+  .affil span { white-space: nowrap; }
+
+  .btns { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 11px 20px;
+    border-radius: 999px;
+    border: 1px solid var(--fg);
+    background: var(--fg);
+    color: var(--bg);
+    transition: transform .12s ease, opacity .12s ease;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); opacity: 0.9; }
+  .btn.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
+  .btn.ghost:hover { border-color: var(--fg); }
+  .btn.disabled { opacity: 0.45; pointer-events: none; }
+  .btn svg { width: 17px; height: 17px; fill: currentColor; }
+
+  /* ---------- Sections ---------- */
+  section { padding: 58px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: 0; }
+  h2 {
+    font-family: Newsreader, Georgia, serif;
+    font-weight: 600;
+    font-size: 1.7rem;
+    letter-spacing: -0.01em;
+    margin: 0 0 20px;
+  }
+  h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 30px 0 8px;
+  }
+  p { margin: 0 0 16px; }
+  .lead { color: var(--fg-soft); }
+
+  /* ---------- Figures ---------- */
+  figure { margin: 0; }
+  .fig {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--card);
+    padding: 1rem;
+    background-color: white;
+  }
+  .fig img { width: 100%; }
+  .fig.missing { position: relative; }
+  .fig.missing img { display: none; }
+  .fig.missing::before {
+    content: attr(data-ph);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 20px;
+    min-height: 220px;
+    color: var(--fg-faint);
+    font-size: 0.9rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: repeating-linear-gradient(45deg, var(--bg-alt), var(--bg-alt) 12px, var(--card) 12px, var(--card) 24px);
+  }
+  figcaption {
+    font-size: 0.9rem;
+    color: var(--fg-faint);
+    padding: 12px 4px 0;
+    line-height: 1.55;
+  }
+  figcaption b { color: var(--fg-soft); }
+
+  /* ---------- Cards ---------- */
+  .cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+    background: var(--card);
+  }
+  .card h3 { margin: 0 0 6px; font-size: 0.98rem; }
+  .card p { margin: 0; font-size: 0.94rem; color: var(--fg-soft); }
+
+  /* ---------- Videos ---------- */
+  .videos { display: grid; gap: 26px; }
+  .video-embed {
+    position: relative;
+    padding-top: 56.25%;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: #000;
+  }
+  .video-embed iframe {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    border: 0;
+  }
+  .video-cap { font-size: 0.92rem; color: var(--fg-faint); margin: 10px 2px 0; }
+  .video-cap b { color: var(--fg-soft); }
+
+  /* ---------- Tables ---------- */
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 0 10px; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.9rem;
+    min-width: 560px;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-size: 0.9rem;
+    color: var(--fg-faint);
+    padding-bottom: 10px;
+  }
+  th, td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { color: var(--fg-soft); font-weight: 600; border-bottom: 1.5px solid var(--fg-faint); }
+  tbody tr:last-child td { border-bottom: 1.5px solid var(--fg-faint); }
+  .row-ours td { font-weight: 700; color: var(--fg); }
+  .row-ours td:first-child { color: var(--accent); }
+
+  /* ---------- BibTeX ---------- */
+  pre {
+    margin: 0;
+    background: var(--bg-alt);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.86rem;
+    line-height: 1.6;
+    color: var(--fg-soft);
+  }
+  .copy-btn {
+    float: right;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--fg-soft);
+    cursor: pointer;
+  }
+  .copy-btn:hover { border-color: var(--fg-faint); }
+
+  footer {
+    padding: 40px 0 56px;
+    text-align: center;
+    color: var(--fg-faint);
+    font-size: 0.88rem;
+  }
+  footer a { color: var(--fg-faint); text-decoration: underline; }
+
+  @media (max-width: 600px) {
+    body { font-size: 16px; }
+    .hero-inner { padding: 52px 20px 44px; }
+    section { padding: 44px 0; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <span class="venue">ECCV NeuSLAM Workshop · Nectar Track</span>
+    <h1 class="title">Stipple: Real-Time Incremental Gaussian Splatting with Visual-Inertial Tracking</h1>
+    <p class="subtitle">Track with a stereo-inertial system and build a live 3D Gaussian Splatting map at the same time, concurrently, and without ever blocking the tracker.</p>
+
+    <p class="authors">
+      Kilian Northoff<sup>1</sup>,
+      Mateo de Mayo<sup>1,2</sup>,
+      Daniel Cremers<sup>1,2</sup>
+    </p>
+    <p class="affil">
+      <span><sup>1</sup>Technical University of Munich</span> &nbsp;·&nbsp;
+      <span><sup>2</sup>Munich Center for Machine Learning</span>
+    </p>
+
+    <div class="btns">
+      <a class="btn" href="https://arxiv.org/abs/2508.00088">
+        <svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 3.5h8V17H8v-1.5zM8 8.5h4V10H8V8.5z"/></svg>
+        Paper
+      </a>
+      <a class="btn ghost" href="https://arxiv.org/pdf/2508.00088">
+        <svg viewBox="0 0 24 24"><path d="M12 3v10.6l3.3-3.3 1.4 1.4L12 17.4 6.3 11.7l1.4-1.4L11 13.6V3h1zM5 19h14v2H5v-2z"/></svg>
+        PDF
+      </a>
+      <a class="btn ghost disabled" href="#" aria-disabled="true">
+        <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48l-.01-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.36 1.09 2.94.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85l-.01 2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2z"/></svg>
+        Code (soon)
+      </a>
+      <a class="btn ghost" href="#bibtex">
+        <svg viewBox="0 0 24 24"><path d="M4 5h16v2H4V5zm0 6h16v2H4v-2zm0 6h10v2H4v-2z"/></svg>
+        BibTeX
+      </a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section id="teaser">
+    <figure class="fig qualitative">
+      <img src="static/images/fig1_qualitative.jpg" alt="Qualitative comparison of Photo-SLAM, CaRtGS, our method, and ground truth on EuRoC and MSD sequences."
+           onerror="this.parentElement.classList.add('missing')">
+    </figure>
+    <figcaption><b>Figure 1. Qualitative comparison against baselines.</b> Renders after the same wall-clock time on the same hardware, against the two strongest stereo-capable baselines, Photo-SLAM and CaRtGS. These are VI-SLAM datasets with monochrome tracking cameras, so the reconstructions are grayscale.</figcaption>
+  </section>
+
+  <section id="abstract">
+    <h2>Abstract</h2>
+    <p class="lead">3D Gaussian Splatting (3DGS) provides efficient rendering of photo-realistic scenes, but its heavy preprocessing and training steps make it a poor fit for applications that require real-time reconstruction in robotics or XR. This capability is important since it allows immediate feedback and interaction with new environments. Visual-inertial odometry (VIO) and simultaneous localization and mapping (VI-SLAM) systems, on the other hand, specifically target real-time applications, which makes them a good choice for integration with 3DGS.</p>
+    <p class="lead">We propose a new method that tracks and reconstructs simultaneously in real-time by leveraging an efficient visual-inertial tracking system based on <b>Basalt</b> together with a novel incremental method built on top of <b>Brush</b>, an efficient Rust-based GPU-vendor-agnostic implementation of 3D Gaussian Splatting. We show that many of the heavy preprocessing and training steps of 3DGS can be replaced with a more efficient incremental training strategy that has direct access to the information generated by the visual-inertial tracking system. Furthermore, we propose and combine multiple practical improvements to increase the efficiency of the training pipeline and adapt it to run in real-time, parallel to the tracking thread. This work highlights the value of exploiting the complementary nature of SLAM and 3DGS, and how that can lead to promising results for real-time 3D reconstruction.</p>
+  </section>
+
+  <section id="contributions">
+    <h2>What's new</h2>
+    <div class="cards">
+      <div class="card">
+        <h3>One real-time pipeline</h3>
+        <p>Stereo images and IMU in; camera poses and a live 3DGS map out. Tracking and splatting run on separate threads and the SLAM thread never blocks on training.</p>
+      </div>
+      <div class="card">
+        <h3>Anchor frames only</h3>
+        <p>Gaussians are seeded exclusively from keyframes whose render still shows unreconstructed area (~10% of keyframes), confining the ~150&nbsp;ms stereo-depth step to a fraction of frames.</p>
+      </div>
+      <div class="card">
+        <h3>Occupancy + SSIM densification</h3>
+        <p>Candidates are back-projected from metric depth, pruned against a 0.1&nbsp;m occupancy grid, then densified precisely where per-pixel SSIM says the render disagrees with the image.</p>
+      </div>
+      <div class="card">
+        <h3>Loop closure for free</h3>
+        <p>Pose-graph corrections from the tracker are applied as a rigid transform to each anchor frame's contiguous block of Gaussians, a simple sequential update.</p>
+      </div>
+      <div class="card">
+        <h3>No CUDA lock-in</h3>
+        <p>Built on Brush (Rust + CubeCL) with BM and SGBM-WLS stereo fallbacks alongside FoundationStereo, so the pipeline runs on non-CUDA GPUs.</p>
+      </div>
+      <div class="card">
+        <h3>Highest stereo tracking FPS</h3>
+        <p>2–3× the tracking frame rate of Photo-SLAM and CaRtGS across EuRoC and the Monado SLAM Dataset, while matching or beating their reconstruction quality on most sequences.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="videos">
+    <h2>Videos</h2>
+    <div class="videos">
+      <div>
+        <div class="video-embed">
+          <iframe src="https://www.youtube.com/embed/M5Nhw3y3AqA" title="Stipple - EuRoC Vicon Room" loading="lazy"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        </div>
+        <p class="video-cap"><b>EuRoC Vicon Room.</b> Incremental reconstruction on a standard VI-SLAM benchmark sequence.</p>
+      </div>
+      <div>
+        <div class="video-embed">
+          <iframe src="https://www.youtube.com/embed/H4PsfCmxbo8" title="Stipple - XREAL live demo" loading="lazy"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        </div>
+        <p class="video-cap"><b>XREAL live demo.</b> Real-time reconstruction running from an XR headset's sensors.</p>
+      </div>
+      <div>
+        <div class="video-embed">
+          <iframe src="https://www.youtube.com/embed/bbBo62U363o" title="Stipple - DepthAI live demo" loading="lazy"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        </div>
+        <p class="video-cap"><b>DepthAI live demo.</b> Live tracking and splatting from a stereo-inertial camera.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="method">
+    <h2>Method</h2>
+    <p>Basalt tracks every incoming stereo-inertial frame; images are undistorted and stereo-rectified with OpenCV. Gaussians are only ever created from Basalt keyframes. Before a keyframe is committed, the current map is rendered from its pose and scored for coverage: if the fraction of pixels with alpha below 0.05 exceeds a threshold, the keyframe becomes an <b>anchor frame</b>, it gets a stereo depth map and seeds new Gaussians. Otherwise it simply joins the pool of views used for ongoing optimization. Because stereo depth (FoundationStereo by default, BM / SGBM-WLS as fallbacks) is the pipeline's main bottleneck at ~150&nbsp;ms per call, restricting it to the ~10% of keyframes that are anchor frames is what keeps the system real-time.</p>
+
+    <figure class="fig">
+      <img src="static/images/fig2_system_overview.png" alt="System overview diagram."
+           onerror="this.parentElement.classList.add('missing')">
+    </figure>
+    <figcaption><b>Figure 2. System overview.</b> Keyframes and poses from the VI tracking system are submitted; the map is rendered and scored for coverage and photometric error. Views with unexplored areas become anchor frames, get stereo depth, seed Gaussians, and are corrected on loop closure; all geometry is then refined by continuous optimization over every keyframe.</figcaption>
+
+    <h3>Adding Gaussians from an anchor frame</h3>
+    <p><b>1. Depth-based seeding.</b> A metric depth map is back-projected with the known intrinsics and the anchor pose into a dense set of candidate Gaussian means. <b>2. Occupancy pruning.</b> Candidates that fall in already-reconstructed regions are discarded using a CPU-side occupancy hashset over a 0.1&nbsp;m uniform grid. <b>3. Burst fit.</b> A short high-learning-rate optimization burst on the new anchor view alone shows how well the sparse seed already explains the image. <b>4. SSIM-based densification.</b> Per-pixel SSIM between the rendered and observed anchor view drives how many Gaussians to add, <code>n_add = MAX_SAMPLES · (1 − mean&nbsp;SSIM) / 2</code>, sampled at locations weighted by <code>1 − SSIM</code>, so densification targets exactly the small, badly reconstructed regions. <b>5. Convergence.</b> A longer training interval on the anchor view lets the new Gaussians settle.</p>
+
+    <h3>Loss</h3>
+    <p>The total loss combines the original 3DGS L1 and SSIM terms with an inverse-depth L1 term on anchor views, an <b>anti-needle</b> regularizer that pushes covariances toward isotropy (highly anisotropic Gaussians near the reconstruction border otherwise make the render foggy), and a <b>scale regularizer</b> that penalizes over-large Gaussians, introduced to curb a subset of Gaussians exploding in size on the EuRoC Machine Hall sequences.</p>
+
+    <h3>Loop closure</h3>
+    <p>Loop detection and pose-graph correction are handled entirely by the visual-inertial tracker. When a correction arrives, every keyframe's stored pose is updated. Only anchor frames own Gaussians, so only their Gaussians receive a geometric update: the same rigid transform applied to the anchor pose translates each Gaussian's mean and rotates its covariance. Keeping every anchor frame's Gaussians contiguous in memory makes this a simple sequential operation.</p>
+
+    <figure class="fig">
+      <img src="static/images/fig3_keyframe_lifecycle.png" alt="Keyframe lifecycle flowchart."
+           onerror="this.parentElement.classList.add('missing')">
+    </figure>
+    <figcaption><b>Figure 3. Keyframe lifecycle.</b> New Gaussians are initialized from stereo-depth estimates but placed only where space is not already occupied, so the map does not accumulate duplicates. A short training burst fits the new view; then photometric error steers extra Gaussians exactly where the render still disagrees, before a final refinement.</figcaption>
+  </section>
+
+  <section id="results">
+    <h2>Results</h2>
+    <p>Evaluated on <b>EuRoC</b> and the <b>Monado SLAM Dataset (MSD)</b>, best of 3 runs per method at equal running time, on a Ryzen&nbsp;9&nbsp;9950X with an RTX&nbsp;5060&nbsp;Ti (16&nbsp;GiB). Tracking accuracy (ATE/RTE) is governed entirely by the underlying tracker and is not reported here.</p>
+
+    <div class="table-scroll">
+      <table>
+        <caption>Table 1 - EuRoC Vicon Room, averaged over V1_01–V2_03. Best of 3 runs, equal running time.</caption>
+        <thead>
+          <tr><th>Method</th><th>PSNR&nbsp;↑</th><th>SSIM&nbsp;↑</th><th>LPIPS&nbsp;↓</th><th>Track FPS&nbsp;↑</th><th>#Splats&nbsp;↓</th><th>GPU&nbsp;GB&nbsp;↓</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Photo-SLAM</td><td>20.22</td><td>0.78</td><td>0.48</td><td>72</td><td>228k</td><td>2.8</td></tr>
+          <tr><td>CaRtGS</td><td>22.41</td><td>0.82</td><td>0.45</td><td>69</td><td>65k</td><td>2.6</td></tr>
+          <tr class="row-ours"><td>Stipple (ours)</td><td>23.49</td><td>0.86</td><td>0.39</td><td>211</td><td>82k</td><td>2.9</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <caption>Table 3 - MSD Valve Index (MIO), averaged over MIO05–MIO08. “–” = method failed to produce a result.</caption>
+        <thead>
+          <tr><th>Method</th><th>PSNR&nbsp;↑</th><th>SSIM&nbsp;↑</th><th>LPIPS&nbsp;↓</th><th>Track FPS&nbsp;↑</th><th>#Splats&nbsp;↓</th><th>GPU&nbsp;GB&nbsp;↓</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Photo-SLAM</td><td>27.29</td><td>0.95</td><td>0.38</td><td>51</td><td>57k</td><td>7.6</td></tr>
+          <tr><td>CaRtGS</td><td>27.29</td><td>0.95</td><td>0.39</td><td>46</td><td>6k</td><td>7.0</td></tr>
+          <tr class="row-ours"><td>Stipple (ours)</td><td>28.30</td><td>0.95</td><td>0.36</td><td>146</td><td>47k</td><td>2.8</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Across the MSD headsets, Stipple attains the best average PSNR, LPIPS and tracking FPS at roughly a third of the peak GPU memory of either baseline, and is the only method to complete several sequences, all four HP&nbsp;Reverb&nbsp;G2 (MGO) scenes and every Samsung&nbsp;Odyssey+&nbsp;(MOO) scene, where Photo-SLAM and CaRtGS fail to produce a usable result.</p>
+    <p><b>The one regression.</b> On EuRoC Machine Hall, CaRtGS leads on PSNR/SSIM (21.80&nbsp;/&nbsp;0.76 vs. our 19.48&nbsp;/&nbsp;0.70). The SSIM-based densification criterion over-triggers there, adding far more Gaussians (394k vs. 118k) than the real-time budget can converge; the scale-regularization loss partially compensates but does not close the gap. We treat this as a stop-gap rather than a solution and leave a principled fix, a densification budget or an improved occupancy criterion, to future work.</p>
+  </section>
+
+  <section id="bibtex">
+    <h2>Citation</h2>
+    <button class="copy-btn" id="copyBtn" type="button">Copy</button>
+    <pre id="bib">@article{northoff2026stipple,
+  title   = {Stipple: Real-Time Incremental Gaussian Splatting with Visual-Inertial Tracking},
+  author  = {Northoff, Kilian and de Mayo, Mateo and Cremers, Daniel},
+  journal = {arXiv preprint arXiv:2508.00088},
+  year    = {2026}
+}</pre>
+  </section>
+
+  <section id="ack">
+    <h2>Acknowledgements</h2>
+    <p class="lead">Supported by the European Research Council (ERC) Advanced Grant SIMULACRON, by the DFG project CR&nbsp;250/26-1 “4D-YouTube”, by the GNI Project “AI4Twinning”, and by the Munich Center for Machine Learning.</p>
+  </section>
+
+</main>
+
+<footer>
+  <p>Page for “Stipple”, ECCV NeuSLAM Workshop (Nectar Track). ·
+     <a href="https://arxiv.org/abs/2508.00088">arXiv:2508.00088</a></p>
+</footer>
+
+<script>
+  (function () {
+    var btn = document.getElementById('copyBtn');
+    var bib = document.getElementById('bib');
+    if (!btn || !bib) return;
+    btn.addEventListener('click', function () {
+      var text = bib.innerText;
+      var done = function () {
+        var old = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(function () { btn.textContent = old; }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () {});
+      } else {
+        var r = document.createRange(); r.selectNode(bib);
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        s.removeAllRanges();
+      }
+    });
+  })();
+</script>
+
+</body>
+</html>
